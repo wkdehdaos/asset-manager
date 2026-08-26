@@ -14,7 +14,7 @@
     "verify": "tsx scripts/verify-engines.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.120.0",
     "@base-ui/react": "^1.7.0",
     "@prisma/client": "^6.1.0",
     "class-variance-authority": "^0.7.1",
