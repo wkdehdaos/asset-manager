@@ -33,6 +33,10 @@
 | **지출 입력 — 빠른 입력 + 고정 토글** | **CSV 가져오기 — 매핑·자동 분류·중복 감지** |
 | <img src="docs/screenshots/transactions.png" width="300" alt="지출 입력"> | <img src="docs/screenshots/import.png" width="300" alt="CSV 임포트"> |
 
+🌙 **다크 모드 지원** — 우측 상단 토글로 전환 (시스템 설정 자동 감지)
+
+<img src="docs/screenshots/dashboard-dark.png" width="300" alt="다크 모드 대시보드">
+
 ---
 
 ## 기술 스택

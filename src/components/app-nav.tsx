@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Receipt, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const LINKS = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
@@ -42,6 +43,8 @@ export function AppNav() {
               </Link>
             );
           })}
+          <div className="mx-1 h-5 w-px bg-border" />
+          <ThemeToggle />
         </nav>
       </div>
     </header>

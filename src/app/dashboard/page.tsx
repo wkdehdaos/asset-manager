@@ -71,9 +71,11 @@ export default async function DashboardPage() {
 
         <CardContent className="space-y-3 pt-4">
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-lg bg-indigo-50 p-3">
-              <div className="text-xs text-indigo-500">필요 월 저축액</div>
-              <div className="text-lg font-bold text-indigo-700">
+            <div className="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-500/10">
+              <div className="text-xs text-indigo-500 dark:text-indigo-400">
+                필요 월 저축액
+              </div>
+              <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
                 {formatWon(diagnosis.requiredMonthlySaving)}
                 <span className="ml-0.5 text-xs font-normal">원</span>
               </div>
@@ -81,15 +83,17 @@ export default async function DashboardPage() {
             <div
               className={cn(
                 "rounded-lg p-3",
-                diagnosis.monthlyShortfall > 0 ? "bg-rose-50" : "bg-emerald-50",
+                diagnosis.monthlyShortfall > 0
+                  ? "bg-rose-50 dark:bg-rose-500/10"
+                  : "bg-emerald-50 dark:bg-emerald-500/10",
               )}
             >
               <div
                 className={cn(
                   "flex items-center gap-1 text-xs",
                   diagnosis.monthlyShortfall > 0
-                    ? "text-rose-500"
-                    : "text-emerald-600",
+                    ? "text-rose-500 dark:text-rose-400"
+                    : "text-emerald-600 dark:text-emerald-400",
                 )}
               >
                 {diagnosis.monthlyShortfall > 0 ? (
@@ -106,8 +110,8 @@ export default async function DashboardPage() {
                 className={cn(
                   "text-lg font-bold",
                   diagnosis.monthlyShortfall > 0
-                    ? "text-rose-700"
-                    : "text-emerald-700",
+                    ? "text-rose-700 dark:text-rose-300"
+                    : "text-emerald-700 dark:text-emerald-300",
                 )}
               >
                 {formatWon(Math.abs(diagnosis.monthlyShortfall))}
@@ -168,7 +172,7 @@ export default async function DashboardPage() {
               <CardHeader className="pb-3">
                 <TitleRow
                   icon={Gauge}
-                  chip="bg-sky-100 text-sky-600"
+                  chip="bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300"
                   right={
                     <Badge variant={PACE_META[pace.signal].variant}>
                       {PACE_META[pace.signal].label}
@@ -203,7 +207,10 @@ export default async function DashboardPage() {
           {/* 카테고리 알림 */}
           <Card>
             <CardHeader className="pb-3">
-              <TitleRow icon={Bell} chip="bg-amber-100 text-amber-600">
+              <TitleRow
+                icon={Bell}
+                chip="bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"
+              >
                 카테고리 알림
               </TitleRow>
             </CardHeader>
@@ -244,7 +251,7 @@ export default async function DashboardPage() {
               <CardHeader className="pb-3">
                 <TitleRow
                   icon={PieChart}
-                  chip="bg-violet-100 text-violet-600"
+                  chip="bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300"
                   right={<Badge variant="secondary">{investment.profile.label}</Badge>}
                 >
                   투자 여력
@@ -350,14 +357,14 @@ function AllocationBar({
         <div className="bg-violet-500" style={{ width: `${allocation.stocks}%` }} />
       </div>
       <div className="mt-1.5 flex justify-between text-xs">
-        <span className="flex items-center gap-1 text-sky-600">
+        <span className="flex items-center gap-1 text-sky-600 dark:text-sky-400">
           <span className="h-2 w-2 rounded-full bg-sky-400" /> 안전 {allocation.safe}
         </span>
-        <span className="flex items-center gap-1 text-emerald-600">
+        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /> 채권{" "}
           {allocation.bonds}
         </span>
-        <span className="flex items-center gap-1 text-violet-600">
+        <span className="flex items-center gap-1 text-violet-600 dark:text-violet-400">
           <span className="h-2 w-2 rounded-full bg-violet-500" /> 주식{" "}
           {allocation.stocks}
         </span>

@@ -21,7 +21,7 @@ export function AiCoachCard() {
   }
 
   return (
-    <Card className="overflow-hidden border-0 bg-gradient-to-br from-violet-50 to-indigo-50 shadow-sm">
+    <Card className="overflow-hidden border-0 bg-gradient-to-br from-violet-50 to-indigo-50 shadow-sm dark:from-violet-500/10 dark:to-indigo-500/10">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
