@@ -23,6 +23,16 @@
 
 ---
 
+## 화면
+
+| 온보딩 — 입력 즉시 진단 | 대시보드 — 진척·페이스·투자·AI 코칭 |
+|:---:|:---:|
+| <img src="docs/screenshots/onboarding.png" width="300" alt="온보딩"> | <img src="docs/screenshots/dashboard.png" width="300" alt="대시보드"> |
+| **지출 입력 — 빠른 입력 + 고정 토글** | **CSV 가져오기 — 매핑·자동 분류·중복 감지** |
+| <img src="docs/screenshots/transactions.png" width="300" alt="지출 입력"> | <img src="docs/screenshots/import.png" width="300" alt="CSV 임포트"> |
+
+---
+
 ## 기술 스택
 
 - **Next.js 15** (App Router) + TypeScript strict
