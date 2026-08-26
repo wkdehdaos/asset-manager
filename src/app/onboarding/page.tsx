@@ -97,7 +97,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-10">
+    <main className="mx-auto max-w-lg px-4 py-6">
       <h1 className="text-2xl font-bold">목표를 세워볼까요</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         입력하는 즉시 필요한 월 저축액과 실현가능성을 계산해 드립니다.
