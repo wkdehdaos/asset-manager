@@ -126,4 +126,4 @@ npx prisma studio    # DB 뷰어
 
 ## 라이선스
 
-[MIT](LICENSE) © 2026 wkdehdaos
+[MIT](LICENSE) © 2026 heesub
