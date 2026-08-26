@@ -1,0 +1,87 @@
+// Prisma 스키마 (SPEC §4 데이터 모델).
+// 로컬 우선 SQLite — 개인 금융 데이터 유출 위험 때문 (SPEC §7).
+// 금액은 전부 원 단위 정수(Int). 비율(expectedAnnualReturn)만 Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  income       IncomeProfile?
+  goals        Goal[]
+  accounts     Account[]
+  transactions Transaction[]
+}
+
+/// 소득 프로필 (User와 1:1)
+model IncomeProfile {
+  id           String @id @default(cuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 월 실수령액(원)
+  monthlyNet   Int
+  /// 연간 상여(원)
+  annualBonus  Int    @default(0)
+  /// 기타 부수입(월, 원)
+  otherIncome  Int    @default(0)
+}
+
+/// 목표 (금액·기한·현재자산·기대수익률)
+model Goal {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title               String   @default("목표")
+  /// 목표 금액(원)
+  targetAmount        Int
+  targetDate          DateTime
+  /// 목표 설정 시점의 현재 자산(원)
+  currentAssets       Int      @default(0)
+  /// 기대 연수익률(소수, 0.05 = 5%)
+  expectedAnnualReturn Float   @default(0.03)
+  createdAt           DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 예금/투자/부채 스냅샷
+model Account {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// deposit | investment | debt
+  type    String
+  name    String
+  /// 잔액(원). 부채는 음수로 두지 않고 type=debt로 구분.
+  balance Int
+  asOf    DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 거래. isFixed가 핵심 필드 — 고정/변동 분리로 "줄일 수 있는 돈"을 계산한다 (SPEC §4).
+model Transaction {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     DateTime
+  /// 지출 금액(원, 양수)
+  amount   Int
+  /// SPEC §4 카테고리 문자열 (SQLite는 enum 미지원)
+  category String
+  /// 고정지출 여부 (월세·보험·구독 등)
+  isFixed  Boolean  @default(false)
+  memo     String?
+
+  @@index([userId, date])
+  @@index([userId, category])
+}
