@@ -1,5 +1,7 @@
 # 자산관리 (asset-manager)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 목표 금액과 기한을 넣으면 **매달 얼마를 저축·소비·투자해야 하는지 계산**하고, 실제 지출을 추적해 **이번 달이 빡빡한지 여유로운지 월중에 판정**하는 개인 자산관리 앱.
 
 기존 가계부는 "얼마 썼다"를 기록한다. 이 앱은 **"목표 대비 지금 페이스가 맞는가"** 를 판정한다.
@@ -119,3 +121,9 @@ npx prisma studio    # DB 뷰어
 - **API 키는 서버 사이드에서만.** `NEXT_PUBLIC_` 접두사 금지.
 
 자세한 명세는 [`docs/SPEC.md`](docs/SPEC.md), 개발 지침은 [`CLAUDE.md`](CLAUDE.md) 참조.
+
+---
+
+## 라이선스
+
+[MIT](LICENSE) © 2026 wkdehdaos
