@@ -16,10 +16,70 @@ model User {
   email     String   @unique
   createdAt DateTime @default(now())
 
-  income       IncomeProfile?
-  goals        Goal[]
-  accounts     Account[]
-  transactions Transaction[]
+  income        IncomeProfile?
+  goals         Goal[]
+  accounts      Account[]
+  transactions  Transaction[]
+  categoryRules CategoryRule[]
+  planItems     PlanItem[]
+  holdings      Holding[]
+}
+
+/// 보유 자산 한 건 (포트폴리오). 자산군별 비중을 계산해 현재 자산을 보여준다.
+/// 금액은 원 단위 정수. assetClass는 portfolio-data.ts의 AssetClass 키.
+model Holding {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  /// stock | fund | savings | bond | crypto | cash | other
+  assetClass String
+  /// 평가금액(원)
+  amount     Int
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 로드맵(1억 프로젝트) 항목. 마일스톤(누적 자산목표) 또는 실행 체크리스트.
+/// done 체크 상태를 저장해 계획표를 추적한다. 기본값은 roadmap-data.ts에서 시드.
+model PlanItem {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 시드 idempotent용 안정 식별자 (roadmap-data.ts의 key).
+  key          String
+  /// "milestone" | "task"
+  kind         String
+  /// 단계/그룹 라벨 (화면 묶음용).
+  group        String
+  /// 시점 라벨 (마일스톤에만).
+  label        String?
+  title        String
+  /// 마일스톤의 누적 목표 자산(원). task면 null.
+  targetAmount Int?
+  order        Int
+  done         Boolean   @default(false)
+  doneAt       DateTime?
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+/// 카테고리 학습 규칙. 거래 내용(가맹점/상대방) → 카테고리.
+/// 사용자가 임포트에서 정한 분류를 기억해 다음 임포트에 자동 적용한다.
+model CategoryRule {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 매칭 기준: 거래 내용 원문(trim). 정확일치로 카테고리를 적용한다.
+  pattern   String
+  category  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, pattern])
 }
 
 /// 소득 프로필 (User와 1:1)
@@ -70,18 +130,22 @@ model Account {
 
 /// 거래. isFixed가 핵심 필드 — 고정/변동 분리로 "줄일 수 있는 돈"을 계산한다 (SPEC §4).
 model Transaction {
-  id       String   @id @default(cuid())
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date     DateTime
-  /// 지출 금액(원, 양수)
-  amount   Int
-  /// SPEC §4 카테고리 문자열 (SQLite는 enum 미지원)
-  category String
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  /// 금액(원, 양수). 지출·입금 모두 양수로 두고 direction으로 구분.
+  amount    Int
+  /// expense | income. 기본은 지출 — 기존 데이터/직접입력은 전부 지출이다.
+  /// 지출 분석(페이스·이상탐지)은 expense만 집계한다 (analysis.ts에서 필터).
+  direction String   @default("expense")
+  /// SPEC §4 카테고리 문자열 (SQLite는 enum 미지원). 입금이면 참고용.
+  category  String
   /// 고정지출 여부 (월세·보험·구독 등)
-  isFixed  Boolean  @default(false)
-  memo     String?
+  isFixed   Boolean  @default(false)
+  memo      String?
 
   @@index([userId, date])
   @@index([userId, category])
+  @@index([userId, direction])
 }

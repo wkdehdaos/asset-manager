@@ -42,6 +42,12 @@ describe("inferCategory — 가맹점 키워드 추론", () => {
     ["CGV 왕십리", "leisure"],
     ["올리브영", "shopping"],
     ["처음보는가맹점", "etc"],
+    // 카뱅 실데이터: 괄호 안 상호명도 부분일치로 잡힌다
+    ["정승화(홍익돈까스금천점)", "dining"],
+    ["네이버페이결제", "shopping"],
+    ["GS25 역삼", "food"],
+    ["유튜브프리미엄", "subscription"],
+    ["박강우", "etc"], // 사람 이름은 분류 불가 → 기타
   ])("%s → %s", (merchant, expected) => {
     expect(inferCategory(merchant)).toBe(expected);
   });
