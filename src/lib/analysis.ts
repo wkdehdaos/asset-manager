@@ -41,6 +41,10 @@ export interface DashboardData {
   pace: MonthPace | null;
   anomalies: CategoryAnomaly[];
   investment: InvestmentCapacity | null;
+  // 순자산 요약(뱅크샐러드 메인 스타일). 현재 자산 스냅샷 + 이번 달 입출금 합계.
+  currentAssets: number;
+  thisMonthIncome: number;
+  thisMonthExpense: number;
 }
 
 /** 대시보드에 필요한 모든 값을 계산한다. 목표/소득이 없으면 null(→온보딩 유도). */
@@ -60,13 +64,16 @@ export async function loadDashboard(
   if (!user || !user.income || !goalRow) return null;
   const income = user.income;
 
-  // DB → core 순수 타입 매핑
-  const transactions: Transaction[] = user.transactions.map((t) => ({
-    date: t.date,
-    amount: t.amount,
-    category: t.category as Transaction["category"],
-    isFixed: t.isFixed,
-  }));
+  // DB → core 순수 타입 매핑.
+  // 입금(income)은 지출 분석(페이스·이상탐지)에서 제외 — 소비만 집계한다.
+  const transactions: Transaction[] = user.transactions
+    .filter((t) => t.direction === "expense")
+    .map((t) => ({
+      date: t.date,
+      amount: t.amount,
+      category: t.category as Transaction["category"],
+      isFixed: t.isFixed,
+    }));
 
   const goal: GoalInput = {
     targetAmount: goalRow.targetAmount,
@@ -119,6 +126,17 @@ export async function loadDashboard(
       ? Math.min(100, (goal.currentAssets / goal.targetAmount) * 100)
       : 0;
 
+  // 이번 달 입출금 합계 (순자산 요약 카드용). 방향 필드로 수입/지출을 가른다.
+  const ty = today.getFullYear();
+  const tm = today.getMonth();
+  let thisMonthIncome = 0;
+  let thisMonthExpense = 0;
+  for (const t of user.transactions) {
+    if (t.date.getFullYear() !== ty || t.date.getMonth() !== tm) continue;
+    if (t.direction === "income") thisMonthIncome += t.amount;
+    else thisMonthExpense += t.amount;
+  }
+
   return {
     title: goalRow.title,
     goal,
@@ -133,5 +151,8 @@ export async function loadDashboard(
     pace,
     anomalies,
     investment,
+    currentAssets: goal.currentAssets,
+    thisMonthIncome,
+    thisMonthExpense,
   };
 }

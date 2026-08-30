@@ -11,8 +11,9 @@
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 0 0% 100%;
+    /* 카카오뱅크 옐로우 (#FEE500 계열) — 밝은 배경 위 다크 텍스트 */
+    --primary: 53 100% 50%;
+    --primary-foreground: 0 0% 13%;
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
@@ -23,7 +24,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 243 75% 59%;
+    --ring: 53 100% 50%;
     --radius: 0.65rem;
 
     /* 페이스·등급 신호색 (앱 고유) */
@@ -41,8 +42,8 @@
     --card-foreground: 0 0% 98%;
     --popover: 240 6% 15%;
     --popover-foreground: 0 0% 98%;
-    --primary: 243 75% 68%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 53 100% 50%;
+    --primary-foreground: 0 0% 13%;
     --secondary: 240 5% 20%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 5% 20%;
@@ -53,7 +54,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5% 24%;
     --input: 240 5% 26%;
-    --ring: 243 75% 68%;
+    --ring: 53 100% 50%;
   }
 }
 

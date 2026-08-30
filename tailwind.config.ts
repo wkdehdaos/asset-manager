@@ -2,11 +2,23 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./src/app/**/*.{ts,tsx}", "./src/components/**/*.{ts,tsx}"],
+  content: [
+    "./src/app/**/*.{ts,tsx}",
+    "./src/components/**/*.{ts,tsx}",
+    // 카테고리·자산군 색상 클래스가 여기 상수맵에 있어 반드시 스캔해야 한다.
+    "./src/lib/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: [
+          '"Pretendard Variable"',
+          "Pretendard",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       colors: {
         background: "hsl(var(--background))",
