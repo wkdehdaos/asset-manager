@@ -1,10 +1,21 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppNav } from "@/components/app-nav";
+import { PwaRegister } from "@/components/pwa-register";
 
 export const metadata: Metadata = {
   title: "자산관리",
-  description: "목표 저축액 계산과 월중 지출 페이스 판정",
+  description: "2030년 1억 모으기 — 로드맵·월별·자산·AI 은행원",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "자산관리" },
+};
+
+// 모바일 뷰포트 — 노치/홈 인디케이터(safe-area)까지 채우고 확대 방지.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#FEE500",
 };
 
 // 하이드레이션 전에 테마를 적용해 다크/라이트 깜빡임(FOUC)을 막는다.
@@ -25,8 +36,12 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        <PwaRegister />
         <AppNav />
-        {children}
+        {/* 하단 고정 탭바에 가리지 않도록 콘텐츠 아래 여백 */}
+        <div className="pb-[calc(4rem+env(safe-area-inset-bottom))]">
+          {children}
+        </div>
       </body>
     </html>
   );
