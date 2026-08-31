@@ -57,7 +57,7 @@ export function AssistantClient() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col">
+    <div className="flex h-[calc(100dvh-8.5rem)] flex-col">
       {/* 대화 영역 */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto pb-2">
         {messages.map((m, i) =>
