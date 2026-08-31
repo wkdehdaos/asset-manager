@@ -22,7 +22,8 @@ import {
   type PlanCategory,
 } from "@/lib/roadmap-data";
 import { computePortfolio } from "@/core/portfolio";
-import { buildYear, type MonthStatus } from "@/core/monthly";
+import { buildYear, monthlySaving, type MonthStatus } from "@/core/monthly";
+import Anthropic from "@anthropic-ai/sdk";
 
 /** 단일 사용자 데모 앱 — 고정 이메일로 upsert. 추후 인증 붙일 자리. */
 const DEMO_EMAIL = "demo@example.com";
@@ -227,6 +228,8 @@ export interface RoadmapTaskGroup {
     title: string;
     done: boolean;
     category: PlanCategory;
+    /** 이 할 일에 걸린 금액(원). 없으면 undefined. */
+    amount?: number;
   }[];
 }
 
@@ -289,9 +292,12 @@ export async function getRoadmap(): Promise<RoadmapView> {
     }));
   const progress = computeRoadmapProgress(milestones, FINAL_GOAL, currentAssets);
 
-  // 항목 key → 카테고리 (roadmap-data 기준). DB에 저장 안 하고 여기서 조인.
+  // 항목 key → 카테고리·금액 (roadmap-data 기준). DB에 저장 안 하고 여기서 조인.
   const catByKey = new Map<string, PlanCategory>(
     DEFAULT_PLAN.filter((p) => p.category).map((p) => [p.key, p.category!]),
+  );
+  const amountByKey = new Map<string, number>(
+    DEFAULT_PLAN.filter((p) => p.amount).map((p) => [p.key, p.amount!]),
   );
   const catOrder = (c: PlanCategory) => PLAN_CATEGORY_ORDER.indexOf(c);
 
@@ -306,7 +312,9 @@ export async function getRoadmap(): Promise<RoadmapView> {
       id: t.id,
       title: t.title,
       done: t.done,
-      category: catByKey.get(t.key) ?? "admin",
+      category:
+        catByKey.get(t.key) ?? (t.category as PlanCategory | null) ?? "admin",
+      amount: amountByKey.get(t.key),
     });
   }
   // 월 안에서 같은 카테고리끼리 묶이도록 카테고리 순으로 정렬.
@@ -439,6 +447,14 @@ export async function getMonthlyPlan(
     select: { amount: true },
   });
   const actualAssets = holdingRows.reduce((s, h) => s + h.amount, 0);
+  // 저축 목표 재정의(AI 은행원/사용자 조정분) 로드.
+  const ovRows = await prisma.savingOverride.findMany({
+    where: { userId },
+    select: { monthKey: true, amount: true },
+  });
+  const overrides: Record<number, number> = Object.fromEntries(
+    ovRows.map((o) => [o.monthKey, o.amount]),
+  );
   // 기본 연도 = 실제 올해 (현재 달이 그 안에 있도록).
   const year = yearArg ?? new Date().getFullYear();
 
@@ -467,12 +483,17 @@ export async function getMonthlyPlan(
       id: t.id,
       title: t.title,
       done: t.done,
-      category: catByKey.get(t.key) ?? "admin",
+      category:
+        catByKey.get(t.key) ?? (t.category as PlanCategory | null) ?? "admin",
     });
   }
 
-  const cells: MonthlyCellView[] = buildYear(year, actualAssets, new Date()).map(
-    (c) => {
+  const cells: MonthlyCellView[] = buildYear(
+    year,
+    actualAssets,
+    new Date(),
+    overrides,
+  ).map((c) => {
     const bucket = tasksByYm.get(c.ym);
     const tasks = bucket?.tasks ?? [];
     return {
@@ -507,4 +528,247 @@ export async function deleteTransaction(id: string): Promise<void> {
   await prisma.transaction.delete({ where: { id } });
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
+}
+
+// ── AI 은행원 (대화형 계획 조정) ────────────────────────────────────────────
+
+export interface BankerMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface BankerReply {
+  reply: string;
+  /** 이번 턴에 실제로 실행한 조정 내역 (사람이 읽는 문장). */
+  actions: string[];
+}
+
+const BANKER_SYSTEM = `당신은 '2030년 1억 모으기' 자산관리 앱의 AI 은행원 '머니'입니다.
+- 친근하고 다정한 존댓말 톤(카카오뱅크 느낌). 이모지를 적당히 쓰고, 어려운 전문용어 대신 쉬운 말로 요약합니다.
+- 사용자가 수입/지출 변화나 계획 변경을 말하면 공감하고, 필요한 조정을 '도구'로 실제 반영하세요.
+  · 특정 달 저축 목표를 바꾸려면 adjust_month_saving 도구를 호출.
+  · 새 할 일(미션)을 추가하려면 add_task 도구를 호출. group은 반드시 [현재 계획]의 계획월목록 label 중 하나여야 합니다.
+- 도구를 부른 뒤에는 무엇을 바꿨는지 한두 문장으로 알려주고, 도움이 될 다음 제안을 덧붙이세요.
+- 금융/서류/조건 질문(예: 청년미래적금·장병내일적금 가입조건, 우대금리, 정부지원 등)에는 성실히 답하세요.
+  최신·정확한 정보가 필요하면 web_search 도구로 직접 검색해서 근거를 찾아 답하고, 출처(은행/기관)를 간단히 언급하세요.
+  제도·금리·조건은 바뀔 수 있으니 "정확한 최신 조건은 해당 은행·공고에서 확인"을 덧붙이세요.
+- 금융 가드레일: 새로운 특정 종목·투자상품·코인을 '추천'하지는 마세요(자산군 수준까지만). 단, 사용자가 이미 진행 중인 상품(청미적·장병내일 등)의 조건 설명은 괜찮습니다. 투자를 언급하면 원금 손실 가능성을 함께 알리고, 사용자를 다그치지 말고 다음 행동을 제시하세요.
+- 금액·비율 계산은 앱이 하니 [현재 계획]의 숫자를 근거로 쓰세요.
+- 답변은 3~6문장, 마크다운·머리말 없이 본문만.`;
+
+const BANKER_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "adjust_month_saving",
+    description:
+      "특정 달의 월 저축 목표 금액(원)을 변경한다. 수입 변화 등으로 저축액을 조정할 때 사용.",
+    input_schema: {
+      type: "object",
+      properties: {
+        monthKey: { type: "number", description: "연월 YYYYMM (예: 202609)" },
+        amount: { type: "number", description: "새 월 저축 목표 금액(원)" },
+      },
+      required: ["monthKey", "amount"],
+    },
+  },
+  {
+    name: "add_task",
+    description: "특정 달에 새 할 일(미션)을 추가한다.",
+    input_schema: {
+      type: "object",
+      properties: {
+        group: {
+          type: "string",
+          description: "월 라벨. 반드시 [현재 계획] 계획월목록의 label 중 하나",
+        },
+        title: { type: "string", description: "할 일 내용" },
+        category: {
+          type: "string",
+          enum: ["income", "saving", "investment", "setup", "growth", "admin"],
+          description: "분류: income 수입, saving 저축, investment 투자, setup 가입·세팅, growth 자기계발, admin 준비·서류",
+        },
+      },
+      required: ["group", "title", "category"],
+    },
+  },
+];
+
+/** 도구 실행 → DB 수정. 성공 시 사람이 읽는 문장 반환. */
+async function runBankerTool(
+  userId: string,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<{ ok: boolean; message: string }> {
+  if (name === "adjust_month_saving") {
+    const monthKey = Number(input.monthKey);
+    const amount = Math.max(0, Math.round(Number(input.amount)));
+    if (!Number.isFinite(monthKey) || !Number.isFinite(amount)) {
+      return { ok: false, message: "월 또는 금액 값이 올바르지 않아요." };
+    }
+    await prisma.savingOverride.upsert({
+      where: { userId_monthKey: { userId, monthKey } },
+      update: { amount },
+      create: { userId, monthKey, amount },
+    });
+    const m = monthKey % 100;
+    return {
+      ok: true,
+      message: `${m}월 저축 목표를 ${amount.toLocaleString("ko-KR")}원으로 변경했어요.`,
+    };
+  }
+  if (name === "add_task") {
+    const group = String(input.group ?? "").trim();
+    const title = String(input.title ?? "").trim();
+    const category = String(input.category ?? "admin");
+    if (!(group in GROUP_MONTH)) {
+      return {
+        ok: false,
+        message: `'${group}'은 계획월 목록에 없어요. 유효한 달을 골라주세요.`,
+      };
+    }
+    if (!title) return { ok: false, message: "할 일 내용이 비어 있어요." };
+    const last = await prisma.planItem.findFirst({
+      where: { userId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    await prisma.planItem.create({
+      data: {
+        userId,
+        key: `ai-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+        kind: "task",
+        group,
+        category,
+        title,
+        order: (last?.order ?? 0) + 1,
+        done: false,
+      },
+    });
+    return { ok: true, message: `${group}에 '${title}' 할 일을 추가했어요.` };
+  }
+  return { ok: false, message: `알 수 없는 도구: ${name}` };
+}
+
+/** AI 은행원과 대화. 도구 호출로 실제 계획을 조정한다. */
+export async function chatWithBanker(
+  history: BankerMessage[],
+): Promise<BankerReply> {
+  const userId = await currentUserId();
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      reply:
+        "지금은 AI 은행원이 연결되지 않았어요. (서버에 ANTHROPIC_API_KEY를 설정하면 대화로 계획을 조정할 수 있어요.)",
+      actions: [],
+    };
+  }
+
+  // [현재 계획] 사실 — 숫자는 앱이 계산해 넘긴다.
+  const holdings = await prisma.holding.findMany({
+    where: { userId },
+    select: { amount: true },
+  });
+  const actualAssets = holdings.reduce((s, h) => s + h.amount, 0);
+  const ovRows = await prisma.savingOverride.findMany({
+    where: { userId },
+    select: { monthKey: true, amount: true },
+  });
+  const overrides: Record<number, number> = Object.fromEntries(
+    ovRows.map((o) => [o.monthKey, o.amount]),
+  );
+  const now = new Date();
+  const curKey = now.getFullYear() * 100 + (now.getMonth() + 1);
+  const facts = {
+    현재자산: actualAssets,
+    최종목표: FINAL_GOAL,
+    전체달성률퍼센트:
+      FINAL_GOAL > 0 ? Math.round((actualAssets / FINAL_GOAL) * 100) : 0,
+    이번달연월: curKey,
+    이번달저축목표: monthlySaving(curKey, overrides),
+    재정의된달: overrides,
+    계획월목록: Object.entries(GROUP_MONTH).map(([label, ym]) => ({
+      label,
+      연월: ym,
+      저축목표: monthlySaving(ym, overrides),
+    })),
+  };
+
+  const client = new Anthropic();
+  const msgs: Anthropic.MessageParam[] = history.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+  const actions: string[] = [];
+
+  try {
+    for (let i = 0; i < 6; i++) {
+      const resp = await client.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 2048,
+        system: `${BANKER_SYSTEM}\n\n[현재 계획]\n${JSON.stringify(facts)}`,
+        // 커스텀 도구 + 웹 검색(서버 실행 도구 — 최신 금융/조건 정보 조회).
+        tools: [
+          ...BANKER_TOOLS,
+          { type: "web_search_20250305", name: "web_search", max_uses: 5 },
+        ],
+        messages: msgs,
+      });
+
+      const toolUses = resp.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+      );
+      if (toolUses.length === 0) {
+        // 웹 검색이 길어지면 pause_turn으로 끊긴다 — 그대로 이어서 재요청해 마저 답하게 한다.
+        if (resp.stop_reason === "pause_turn") {
+          msgs.push({
+            role: "assistant",
+            content: resp.content as unknown as Anthropic.ContentBlockParam[],
+          });
+          continue;
+        }
+        const text = resp.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+          .trim();
+        if (actions.length > 0) {
+          revalidatePath("/monthly");
+          revalidatePath("/roadmap");
+        }
+        return { reply: text || "네, 반영했어요!", actions };
+      }
+
+      // 도구 실행 후 결과를 되돌려준다.
+      msgs.push({
+        role: "assistant",
+        content: resp.content as unknown as Anthropic.ContentBlockParam[],
+      });
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        const r = await runBankerTool(
+          userId,
+          tu.name,
+          tu.input as Record<string, unknown>,
+        );
+        if (r.ok) actions.push(r.message);
+        results.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: r.message,
+          is_error: !r.ok,
+        });
+      }
+      msgs.push({ role: "user", content: results });
+    }
+    if (actions.length > 0) {
+      revalidatePath("/monthly");
+      revalidatePath("/roadmap");
+    }
+    return { reply: "요청하신 내용을 반영했어요!", actions };
+  } catch {
+    return {
+      reply:
+        "앗, 잠시 문제가 생겼어요. 잠시 후 다시 시도해 주세요. (그동안 계획은 안전하게 유지돼요.)",
+      actions,
+    };
+  }
 }

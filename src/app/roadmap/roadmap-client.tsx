@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronDown } from "lucide-react";
 import {
@@ -8,8 +8,12 @@ import {
   type RoadmapMilestoneView,
 } from "@/core/roadmap";
 import { togglePlanItem, type RoadmapTaskGroup } from "@/app/actions";
-import { PLAN_CATEGORY_META, PLAN_CATEGORY_ORDER } from "@/lib/roadmap-data";
-import { formatWonKorean } from "@/lib/format";
+import {
+  PLAN_CATEGORY_META,
+  PLAN_CATEGORY_ORDER,
+  type PlanCategory,
+} from "@/lib/roadmap-data";
+import { formatWon, formatWonKorean } from "@/lib/format";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -20,6 +24,7 @@ interface Props {
   finalGoal: number;
   currentAssets: number;
   dDay: number;
+  monthEndDDay: number;
 }
 
 export function RoadmapClient({
@@ -28,12 +33,16 @@ export function RoadmapClient({
   finalGoal,
   currentAssets,
   dDay,
+  monthEndDDay,
 }: Props) {
   const [ms, setMs] = useState(initialMs);
   const [groups, setGroups] = useState(initialGroups);
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(initialGroups.length ? [initialGroups[0]!.group] : []),
   );
+  const [selectedCat, setSelectedCat] = useState<PlanCategory | "all">("all");
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, startTransition] = useTransition();
 
   const progress = useMemo(
@@ -76,18 +85,35 @@ export function RoadmapClient({
     startTransition(() => void togglePlanItem(id, next));
   }
 
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  }
+
   function toggleTask(id: string) {
     let next = false;
+    let toastMsg: string | null = null;
     setGroups((prev) =>
       prev.map((g) => ({
         ...g,
         items: g.items.map((t) => {
           if (t.id !== id) return t;
           next = !t.done;
+          if (next && t.amount) {
+            const label =
+              t.category === "saving"
+                ? "저축 완료 💰"
+                : t.category === "income"
+                  ? "수입 확보 💵"
+                  : "완료 ✅";
+            toastMsg = `${formatWon(t.amount)}원 ${label}`;
+          }
           return { ...t, done: next };
         }),
       })),
     );
+    if (toastMsg) showToast(toastMsg);
     startTransition(() => void togglePlanItem(id, next));
   }
 
@@ -102,6 +128,31 @@ export function RoadmapClient({
             100,
         )
       : 0;
+
+  const featuredItems = featured?.items ?? [];
+  // 이번 달 누적 저축액 = 체크한 저축 카테고리 할 일의 금액 합.
+  const savedTarget = featuredItems
+    .filter((t) => t.category === "saving" && t.done)
+    .reduce((s, t) => s + (t.amount ?? 0), 0);
+  const savedCountUp = useCountUp(savedTarget);
+  // 이번 달에 실제로 존재하는 카테고리만 칩으로.
+  const catsInMonth = PLAN_CATEGORY_ORDER.filter((c) =>
+    featuredItems.some((t) => t.category === c),
+  );
+  const filteredItems =
+    selectedCat === "all"
+      ? featuredItems
+      : featuredItems.filter((t) => t.category === selectedCat);
+
+  // 월말 마감 동기부여 상태.
+  const remaining = featuredItems.filter((t) => !t.done).length;
+  const allDone = featuredItems.length > 0 && remaining === 0;
+  const monthNum = featured ? featured.monthKey % 100 : 0;
+  const urgent = remaining > 0 && monthEndDDay <= 7; // 마감 임박 + 미완료
+  const firstUndone = featuredItems.find((t) => !t.done);
+  const firstUndoneTitle = firstUndone
+    ? firstUndone.title.split(" (")[0]!.trim()
+    : "";
 
   return (
     <div className="space-y-5 pb-4">
@@ -256,29 +307,52 @@ export function RoadmapClient({
 
       {/* 월별 할 일 */}
       <div className="space-y-3">
-        {/* 카테고리 범례 */}
-        <div className="flex flex-wrap gap-1 px-1">
-          {PLAN_CATEGORY_ORDER.map((c) => (
-            <span
-              key={c}
-              className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                PLAN_CATEGORY_META[c].className,
-              )}
-            >
-              {PLAN_CATEGORY_META[c].label}
-            </span>
-          ))}
-        </div>
-
-        {/* 이번 달 — 강조 카드 (PDF 스타일, 항상 펼침) */}
+        {/* 이번 달 — 강조 카드 (필터 칩 + 저축 카운터 + 월말 D-day) */}
         {featured && (
-          <Card className="p-4">
-            <div className="text-xs font-medium text-muted-foreground">
-              {featured.group}
+          <Card
+            className={cn(
+              "border-2 p-4 transition-colors",
+              allDone
+                ? "border-emerald-400"
+                : urgent
+                  ? "border-orange-400" // 마감 임박 + 미완료 → 경고색
+                  : remaining > 0
+                    ? "border-[#FFE500]" // 진행 중 → 카카오 옐로우
+                    : "border-transparent",
+            )}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {featured.group}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                      urgent
+                        ? "bg-orange-500 text-white"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    마감 D-{monthEndDDay}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold">이번 달 해야 할 일 📝</h2>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-[10px] text-muted-foreground">
+                  이번 달 저축
+                </div>
+                <div className="text-lg font-extrabold tabular-nums text-sky-600 dark:text-sky-400">
+                  {formatWon(savedCountUp)}
+                  <span className="text-xs font-bold">원</span>
+                </div>
+              </div>
             </div>
-            <h2 className="mb-3 text-lg font-bold">이번 달 해야 할 일 📝</h2>
-            <div className="mb-3 flex items-center gap-2">
+
+            {/* 진행바 */}
+            <div className="mb-3 mt-2 flex items-center gap-2">
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
@@ -289,14 +363,58 @@ export function RoadmapClient({
                 {featuredPct}%
               </span>
             </div>
+
+            {/* 카테고리 필터 칩 (수평 스크롤) */}
+            <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+              <FilterChip
+                active={selectedCat === "all"}
+                onClick={() => setSelectedCat("all")}
+                label="전체"
+              />
+              {catsInMonth.map((c) => (
+                <FilterChip
+                  key={c}
+                  active={selectedCat === c}
+                  onClick={() => setSelectedCat(c)}
+                  label={`${PLAN_CATEGORY_META[c].emoji} ${PLAN_CATEGORY_META[c].label}`}
+                />
+              ))}
+            </div>
+
+            {/* 월말 마감 동기부여 메시지 */}
+            {featuredItems.length > 0 && (
+              <div
+                className={cn(
+                  "mb-3 rounded-lg p-2.5 text-xs font-medium",
+                  allDone
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    : urgent
+                      ? "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
+                      : "bg-muted text-muted-foreground",
+                )}
+              >
+                {allDone
+                  ? `🎉 ${monthNum}월 완벽 달성! 최고예요.`
+                  : remaining === 1
+                    ? `⏰ ${monthNum}월이 ${monthEndDDay}일 남았어요! '${firstUndoneTitle}' 하나만 더 하면 ${monthNum}월 완벽 달성!`
+                    : `⏰ ${monthNum}월이 ${monthEndDDay}일 남았어요! 아직 ${remaining}개 남았어요.`}
+              </div>
+            )}
+
+            {/* 필터된 할 일 */}
             <div className="space-y-2">
-              {featured.items.map((t) => (
+              {filteredItems.map((t) => (
                 <TaskCard
                   key={t.id}
                   item={t}
                   onToggle={() => toggleTask(t.id)}
                 />
               ))}
+              {filteredItems.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  이 분류에 할 일이 없어요.
+                </p>
+              )}
             </div>
           </Card>
         )}
@@ -365,8 +483,65 @@ export function RoadmapClient({
       >
         오늘의 저축하기
       </Link>
+
+      {/* 체크 시 토스트 */}
+      {toast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center px-4">
+          <div className="rounded-full bg-neutral-900 px-4 py-2 text-sm font-bold text-white shadow-lg">
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** 수평 스크롤 필터 칩. */
+function FilterChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-card text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** 숫자 카운트업 — target이 바뀌면 부드럽게 증감 애니메이션. */
+function useCountUp(target: number, duration = 500): number {
+  const [val, setVal] = useState(target);
+  const prev = useRef(target);
+  useEffect(() => {
+    const start = prev.current;
+    if (start === target) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - (1 - p) * (1 - p); // ease-out
+      setVal(Math.round(start + (target - start) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else prev.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return val;
 }
 
 /** 할 일 카드 — 파란 체크박스 + 파스텔 카테고리 태그 (PDF 3p 스타일). */

@@ -21,6 +21,17 @@ describe("cumulativeAt — 목표 누적", () => {
   });
 });
 
+describe("저축 목표 재정의(overrides)", () => {
+  const ov = { 202609: 300_000 }; // 9월 저축을 30만으로 조정
+  it("monthlySaving이 재정의 값을 우선", () => {
+    expect(monthlySaving(202609, ov)).toBe(300_000);
+    expect(monthlySaving(202610, ov)).toBe(830_000); // 다른 달은 기본값
+  });
+  it("누적에도 반영", () => {
+    expect(cumulativeAt(202609, PLAN_BASE, ov)).toBe(PLAN_BASE + 300_000);
+  });
+});
+
 describe("buildYear — 실제 날짜 기준 상태 + 자산 기준 누적", () => {
   const assets = 5_240_000; // 실제 자산 524만
 

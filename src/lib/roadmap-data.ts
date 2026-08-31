@@ -28,17 +28,17 @@ export const PLAN_CATEGORY_ORDER: PlanCategory[] = [
   "admin",
 ];
 
-/** 카테고리 라벨 + 배지 색 (UI 문자열·스타일은 상수 맵에 모은다 — CLAUDE.md). */
+/** 카테고리 라벨 + 이모지 + 배지 색 (UI 문자열·스타일은 상수 맵에 모은다 — CLAUDE.md). */
 export const PLAN_CATEGORY_META: Record<
   PlanCategory,
-  { label: string; className: string }
+  { label: string; emoji: string; className: string }
 > = {
-  income: { label: "수입", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  saving: { label: "저축", className: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" },
-  investment: { label: "투자", className: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300" },
-  setup: { label: "가입·세팅", className: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  growth: { label: "자기계발", className: "bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300" },
-  admin: { label: "준비·서류", className: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300" },
+  income: { label: "수입", emoji: "💵", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
+  saving: { label: "저축", emoji: "💰", className: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" },
+  investment: { label: "투자", emoji: "📈", className: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300" },
+  setup: { label: "가입·세팅", emoji: "🏦", className: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
+  growth: { label: "자기계발", emoji: "📚", className: "bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300" },
+  admin: { label: "준비·서류", emoji: "📄", className: "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300" },
 };
 
 export interface DefaultPlanItem {
@@ -52,6 +52,8 @@ export interface DefaultPlanItem {
   targetAmount?: number;
   /** 할 일 카테고리 (task에만). */
   category?: PlanCategory;
+  /** 이 할 일에 걸린 금액(원). 체크 시 "N원 완료!" 토스트·누적 저축액 집계에 쓴다. */
+  amount?: number;
   /** 시드 시 기본 달성 여부 (예: 현재 시점 '시작'은 이미 달성). */
   done?: boolean;
 }
@@ -73,9 +75,9 @@ const MILESTONES: DefaultPlanItem[] = [
  */
 const TASKS: DefaultPlanItem[] = [
   // 2026년 9월 — 지금 당장 (계획서 ⑦)
-  { key: "m2609-parking", kind: "task", group: "2026년 9월", category: "saving", title: "용돈 30만 → 파킹통장 자동이체 설정 (1억의 첫 실행)" },
-  { key: "m2609-auto53", kind: "task", group: "2026년 9월", category: "saving", title: "알바·과외 급여일 53만 자동이체 (월 저축 83만 완성)" },
-  { key: "m2609-tutor", kind: "task", group: "2026년 9월", category: "income", title: "과외 자리 확보 (+30만 수입)" },
+  { key: "m2609-parking", kind: "task", group: "2026년 9월", category: "saving", amount: 300_000, title: "용돈 30만 → 파킹통장 자동이체 설정 (1억의 첫 실행)" },
+  { key: "m2609-auto53", kind: "task", group: "2026년 9월", category: "saving", amount: 530_000, title: "알바·과외 급여일 53만 자동이체 (월 저축 83만 완성)" },
+  { key: "m2609-tutor", kind: "task", group: "2026년 9월", category: "income", amount: 300_000, title: "과외 자리 확보 (+30만 수입)" },
   { key: "m2609-income2025", kind: "task", group: "2026년 9월", category: "admin", title: "2025년 소득 유무 확인 → 12월 청미적 2차 가입 가능 판정" },
   { key: "m2609-counsel", kind: "task", group: "2026년 9월", category: "admin", title: "서민금융진흥원 재무상담 온라인 이수 (우대 0.2%p)" },
   { key: "m2609-tuition", kind: "task", group: "2026년 9월", category: "admin", title: "부모님 회사 학자금 규정 확인 (정액 vs 실비)" },
@@ -92,7 +94,7 @@ const TASKS: DefaultPlanItem[] = [
 
   // 2026년 12월 — 청미적 A안 가입
   { key: "m2612-join", kind: "task", group: "2026년 12월", category: "setup", title: "청년미래적금 2차 가입 (2025 소득 있으면) — A안" },
-  { key: "m2612-setup", kind: "task", group: "2026년 12월", category: "setup", title: "가입 시 월 50만 자동이체 + 나라사랑카드 소액 정기결제 연결" },
+  { key: "m2612-setup", kind: "task", group: "2026년 12월", category: "saving", amount: 500_000, title: "가입 시 월 50만 자동이체 + 나라사랑카드 소액 정기결제 연결" },
 
   // 2027년 1월 — 저축 막바지
   { key: "m2701-split", kind: "task", group: "2027년 1월", category: "investment", title: "모은 돈 배분: 비상금·버퍼 300만 파킹 / 500~600만 투자계좌" },
@@ -104,7 +106,7 @@ const TASKS: DefaultPlanItem[] = [
   // 2027년 3월 — 입대
   { key: "m2703-cma-b", kind: "task", group: "2027년 3월 (입대)", category: "setup", title: "(B안) 훈련소에서 청년미래적금 하나은행 비대면 가입" },
   { key: "m2703-jangbyeong", kind: "task", group: "2027년 3월 (입대)", category: "setup", title: "장병내일준비적금 가입 (하나 제외 2곳, 월 55만)" },
-  { key: "m2703-auto105", kind: "task", group: "2027년 3월 (입대)", category: "saving", title: "매월 적금 105만 자동이체 설정" },
+  { key: "m2703-auto105", kind: "task", group: "2027년 3월 (입대)", category: "saving", amount: 1_050_000, title: "매월 적금 105만 자동이체 설정" },
 
   // 복무 중 (반복 점검)
   { key: "mmil-rate", kind: "task", group: "복무 중 (분기 점검)", category: "admin", title: "우대금리 실적(급여입금·카드결제 횟수) 앱에서 점검" },
@@ -120,7 +122,7 @@ const TASKS: DefaultPlanItem[] = [
   { key: "m2811-tutor", kind: "task", group: "2028년 11월 (전역)", category: "income", title: "과외 2~3건 확보 (공백기 풀타임 알바 병행)" },
 
   // 2029년 3월 — 복학
-  { key: "m2903-cma-keep", kind: "task", group: "2029년 3월 (복학)", category: "saving", title: "청년미래적금 50만 만기까지 유지" },
+  { key: "m2903-cma-keep", kind: "task", group: "2029년 3월 (복학)", category: "saving", amount: 500_000, title: "청년미래적금 50만 만기까지 유지" },
   { key: "m2903-routine", kind: "task", group: "2029년 3월 (복학)", category: "income", title: "학기 중 과외 2건 + 알바 루틴 (월 145) + 나머지 전액 투자" },
   { key: "m2903-scholar", kind: "task", group: "2029년 3월 (복학)", category: "income", title: "외부 재단 생활비형 장학금 신청 (학점 3.5~4.0 관리)" },
 

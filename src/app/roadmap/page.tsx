@@ -14,8 +14,21 @@ function daysUntilGoal(): number {
   );
 }
 
+/** 해당 연월(YYYYMM) 월말까지 남은 일수. 이미 지났으면 0. */
+function daysUntilMonthEnd(monthKey: number): number {
+  const y = Math.floor(monthKey / 100);
+  const m = monthKey % 100; // 1~12
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(y, m, 0); // 그 달 마지막 날
+  return Math.max(0, Math.ceil((end.getTime() - today.getTime()) / 86_400_000));
+}
+
 export default async function RoadmapPage() {
   const view = await getRoadmap();
+  // 강조(이번 달) 그룹 = 마지막 표시 그룹.
+  const featured = view.taskGroups[view.taskGroups.length - 1];
+  const monthEndDDay = featured ? daysUntilMonthEnd(featured.monthKey) : 0;
   return (
     <main className="mx-auto max-w-lg px-4 py-6">
       <RoadmapClient
@@ -24,6 +37,7 @@ export default async function RoadmapPage() {
         finalGoal={view.finalGoal}
         currentAssets={view.currentAssets}
         dDay={daysUntilGoal()}
+        monthEndDDay={monthEndDDay}
       />
     </main>
   );
