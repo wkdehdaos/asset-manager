@@ -20,9 +20,24 @@ model User {
   goals         Goal[]
   accounts      Account[]
   transactions  Transaction[]
-  categoryRules CategoryRule[]
-  planItems     PlanItem[]
-  holdings      Holding[]
+  categoryRules   CategoryRule[]
+  planItems       PlanItem[]
+  holdings        Holding[]
+  savingOverrides SavingOverride[]
+}
+
+/// 월별 저축 목표 재정의. AI 은행원(또는 사용자)이 특정 달 저축액을 조정하면 저장.
+/// 없으면 core/monthly.ts의 기본 단계별 저축액을 쓴다.
+model SavingOverride {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 연월 키 YYYYMM
+  monthKey Int
+  /// 재정의된 월 저축 목표(원)
+  amount   Int
+
+  @@unique([userId, monthKey])
 }
 
 /// 보유 자산 한 건 (포트폴리오). 자산군별 비중을 계산해 현재 자산을 보여준다.
@@ -54,6 +69,8 @@ model PlanItem {
   kind         String
   /// 단계/그룹 라벨 (화면 묶음용).
   group        String
+  /// 카테고리 (AI 추가 할 일 등 코드 기본값에 없는 항목용). 없으면 key로 추론.
+  category     String?
   /// 시점 라벨 (마일스톤에만).
   label        String?
   title        String

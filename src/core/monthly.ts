@@ -29,11 +29,16 @@ function nextYm(ym: number): number {
   return y * 100 + m;
 }
 
+/** 월 저축 목표 재정의 맵 (연월 키 → 금액). AI 은행원/사용자 조정분. */
+export type SavingOverrides = Record<number, Won>;
+
 /**
- * 해당 월의 저축 목표액 — 계획서 단계별.
+ * 해당 월의 저축 목표액.
+ * 재정의(overrides)가 있으면 그 값, 없으면 계획서 단계별 기본값.
  * 입대 전 83만 → 군 복무 105만 → 전역 후 150만. 계획 밖은 0.
  */
-export function monthlySaving(ym: number): Won {
+export function monthlySaving(ym: number, overrides: SavingOverrides = {}): Won {
+  if (overrides[ym] !== undefined) return Math.max(0, Math.round(overrides[ym]!));
   if (ym < PLAN_START) return 0;
   if (ym <= 202702) return 830_000; // 2026.09~2027.02 입대 전
   if (ym <= 202811) return 1_050_000; // 2027.03~2028.11 군 복무
@@ -42,12 +47,16 @@ export function monthlySaving(ym: number): Won {
 }
 
 /** 계획상 목표 누적 자산 = 시작 자산 + 시작월부터 해당 월까지 저축 목표 합. */
-export function cumulativeAt(ym: number, base: Won = PLAN_BASE): Won {
+export function cumulativeAt(
+  ym: number,
+  base: Won = PLAN_BASE,
+  overrides: SavingOverrides = {},
+): Won {
   if (ym < PLAN_START) return base;
   let total = base;
   let cur = PLAN_START;
   while (cur <= ym) {
-    total += monthlySaving(cur);
+    total += monthlySaving(cur, overrides);
     cur = nextYm(cur);
   }
   return total;
@@ -82,10 +91,11 @@ export function buildYear(
   year: number,
   actualAssets: Won,
   today: Date,
+  overrides: SavingOverrides = {},
 ): MonthCell[] {
   const curKey = ymKey(today.getFullYear(), today.getMonth() + 1);
   // 이번 달 목표 누적을 기준점으로, 실제 자산에 맞춰 앞뒤로 투영.
-  const anchorTarget = cumulativeAt(curKey);
+  const anchorTarget = cumulativeAt(curKey, PLAN_BASE, overrides);
   const startOfToday = new Date(
     today.getFullYear(),
     today.getMonth(),
@@ -101,7 +111,7 @@ export function buildYear(
     // 이번 달 누적 = 실제 자산, 나머지는 저축 목표 차이만큼 가감.
     const projected = Math.max(
       0,
-      actualAssets + cumulativeAt(ym) - anchorTarget,
+      actualAssets + cumulativeAt(ym, PLAN_BASE, overrides) - anchorTarget,
     );
 
     const dDay =
@@ -113,7 +123,7 @@ export function buildYear(
       year,
       month,
       ym,
-      savingTarget: monthlySaving(ym),
+      savingTarget: monthlySaving(ym, overrides),
       cumulative: projected,
       status,
       dDay,
