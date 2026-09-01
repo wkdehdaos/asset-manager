@@ -63,16 +63,12 @@
     @apply border-border;
   }
   html {
-    /* 좌우 스크롤(가로 넘침) 방지 — 폰에서 화면이 옆으로 움직이는 것 차단 */
-    overflow-x: hidden;
+    /* clip: 가로 넘침만 잘라내고 세로 스크롤은 그대로 유지 (hidden은 세로 스크롤을 망가뜨림) */
+    overflow-x: clip;
   }
   body {
     background-color: hsl(var(--page));
     @apply text-foreground antialiased;
-    /* 모바일 고무줄 스크롤 억제 + 가로 넘침 방지 */
-    overscroll-behavior-y: none;
-    overflow-x: hidden;
-    max-width: 100vw;
   }
   /* 탭 시 회색 깜빡임 제거 + 더블탭 확대 지연(300ms) 제거로 즉각 반응 */
   a,
