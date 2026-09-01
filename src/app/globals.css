@@ -65,5 +65,26 @@
   body {
     background-color: hsl(var(--page));
     @apply text-foreground antialiased;
+    /* 모바일 고무줄 스크롤 억제 */
+    overscroll-behavior-y: none;
+  }
+  /* 탭 시 회색 깜빡임 제거 + 더블탭 확대 지연(300ms) 제거로 즉각 반응 */
+  a,
+  button,
+  [role="button"],
+  label,
+  input,
+  select {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  /* 터치 기기에서 누르는 즉시 살짝 반응 (모든 버튼/링크) */
+  @media (hover: none) and (pointer: coarse) {
+    a:active,
+    button:active,
+    [role="button"]:active {
+      opacity: 0.6;
+      transition: opacity 0.05s;
+    }
   }
 }
