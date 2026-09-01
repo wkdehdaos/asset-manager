@@ -45,9 +45,9 @@ export function MonthlyClient({ view }: { view: MonthlyPlanView }) {
   return (
     <div className="space-y-4">
       {/* 헤더 + 연도 탭 */}
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">{view.year}년 로드맵</h1>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {view.years.map((y) => (
             <Link
               key={y}

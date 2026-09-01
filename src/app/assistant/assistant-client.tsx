@@ -57,7 +57,7 @@ export function AssistantClient() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-8.5rem)] flex-col">
+    <div className="flex h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] flex-col">
       {/* 대화 영역 */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto pb-2">
         {messages.map((m, i) =>
@@ -70,7 +70,7 @@ export function AssistantClient() {
                 <div className="mb-0.5 text-[11px] font-medium text-muted-foreground">
                   AI 금융비서 머니
                 </div>
-                <div className="whitespace-pre-wrap rounded-2xl rounded-tl-sm bg-card border px-3 py-2 text-sm">
+                <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm bg-card border px-3 py-2 text-sm">
                   {m.content}
                 </div>
                 {m.actions && m.actions.length > 0 && (
@@ -89,7 +89,7 @@ export function AssistantClient() {
             </div>
           ) : (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+              <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                 {m.content}
               </div>
             </div>
@@ -134,7 +134,8 @@ export function AssistantClient() {
           placeholder="예: 이번 달 저축 목표 낮춰줘"
           disabled={pending}
           className={cn(
-            "h-11 flex-1 rounded-full border border-input bg-background px-4 text-sm",
+            // text-base(16px): iOS에서 입력칸 포커스 시 자동 확대(화면 움직임) 방지
+            "h-11 min-w-0 flex-1 rounded-full border border-input bg-background px-4 text-base",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         />
