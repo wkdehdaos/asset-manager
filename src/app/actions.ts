@@ -9,7 +9,6 @@ import {
   generateCoaching,
   type CoachResult,
 } from "@/server/ai-coach";
-import { transactionKey } from "@/core/csv-import";
 import {
   computeRoadmapProgress,
   type RoadmapProgress,
@@ -22,8 +21,21 @@ import {
   type PlanCategory,
 } from "@/lib/roadmap-data";
 import { computePortfolio } from "@/core/portfolio";
+import { marketValueKrw, dailyChangePct } from "@/core/holding-valuation";
 import { buildYear, monthlySaving, type MonthStatus } from "@/core/monthly";
+import {
+  fetchQuotes,
+  fetchUsdKrw,
+  normalizeTicker,
+  type Quote,
+} from "@/server/market-data";
+import {
+  extractHoldingsFromImage as runVision,
+  type VisionResult,
+} from "@/server/asset-vision";
 import Anthropic from "@anthropic-ai/sdk";
+
+export type { VisionResult, ExtractedHolding } from "@/server/asset-vision";
 
 /** 단일 사용자 데모 앱 — 고정 이메일로 upsert. 추후 인증 붙일 자리. */
 const DEMO_EMAIL = "demo@example.com";
@@ -113,108 +125,6 @@ export async function getCoaching(): Promise<CoachResult> {
     return { text: "목표를 먼저 설정해 주세요.", source: "fallback" };
   }
   return generateCoaching(buildCoachFacts(data));
-}
-
-export interface ImportRow {
-  date: string; // YYYY-MM-DD
-  amount: number;
-  category: string;
-  memo?: string;
-  /** expense | income. 생략 시 지출 (기존 카드 CSV 임포트 호환). */
-  direction?: "expense" | "income";
-  isFixed?: boolean;
-}
-
-/**
- * CSV 임포트: 기존 거래(날짜+금액)와 중복되는 행은 건너뛰고 나머지만 저장.
- * 배치 내 중복도 함께 제거한다.
- */
-export async function importTransactions(
-  rows: ImportRow[],
-): Promise<{ inserted: number; skipped: number }> {
-  const userId = await currentUserId();
-  const existing = await prisma.transaction.findMany({
-    where: { userId },
-    select: { date: true, amount: true, direction: true },
-  });
-  // 중복 키에 방향을 포함 — 같은 날 같은 금액이라도 입금·지출은 별개 거래다.
-  const dedupKey = (date: Date, amount: number, direction: string) =>
-    `${direction}|${transactionKey(date, amount)}`;
-  const seen = new Set(
-    existing.map((t) => dedupKey(t.date, t.amount, t.direction)),
-  );
-
-  const toCreate: {
-    userId: string;
-    date: Date;
-    amount: number;
-    category: string;
-    direction: string;
-    isFixed: boolean;
-    memo: string | null;
-  }[] = [];
-  let skipped = 0;
-
-  for (const r of rows) {
-    const date = new Date(r.date);
-    if (Number.isNaN(date.getTime())) {
-      skipped++;
-      continue;
-    }
-    const direction = r.direction ?? "expense";
-    const key = dedupKey(date, r.amount, direction);
-    if (seen.has(key)) {
-      skipped++;
-      continue;
-    }
-    seen.add(key);
-    toCreate.push({
-      userId,
-      date,
-      amount: Math.round(r.amount),
-      category: r.category,
-      direction,
-      isFixed: r.isFixed ?? false,
-      memo: r.memo?.trim() || null,
-    });
-  }
-
-  if (toCreate.length > 0) {
-    await prisma.transaction.createMany({ data: toCreate });
-  }
-
-  // 카테고리 학습: 이번에 저장한 지출의 (내용 → 카테고리)를 규칙으로 기억한다.
-  // 다음 임포트에서 같은 내용은 자동으로 이 카테고리가 적용된다 (최신 선택이 규칙을 덮어씀).
-  const rules = new Map<string, string>();
-  for (const t of toCreate) {
-    const pattern = t.memo?.trim();
-    if (t.direction === "expense" && pattern) rules.set(pattern, t.category);
-  }
-  if (rules.size > 0) {
-    await prisma.$transaction(
-      [...rules].map(([pattern, category]) =>
-        prisma.categoryRule.upsert({
-          where: { userId_pattern: { userId, pattern } },
-          update: { category },
-          create: { userId, pattern, category },
-        }),
-      ),
-    );
-  }
-
-  revalidatePath("/transactions");
-  revalidatePath("/dashboard");
-  return { inserted: toCreate.length, skipped };
-}
-
-/** 학습된 카테고리 규칙을 내용→카테고리 맵으로 반환 (임포트 미리보기에서 자동 적용용). */
-export async function getCategoryRules(): Promise<Record<string, string>> {
-  const userId = await currentUserId();
-  const rules = await prisma.categoryRule.findMany({
-    where: { userId },
-    select: { pattern: true, category: true },
-  });
-  return Object.fromEntries(rules.map((r) => [r.pattern, r.category]));
 }
 
 // ── 로드맵 (1억 프로젝트 계획표) ────────────────────────────────────────────
@@ -341,10 +251,31 @@ export async function getRoadmap(): Promise<RoadmapView> {
 
 // ── 포트폴리오 (현재 자산) ──────────────────────────────────────────────────
 
+export interface PortfolioHoldingView {
+  id: string;
+  name: string;
+  assetClass: string;
+  amount: number;
+  /** 실시간 종목이면 야후 심볼, 아니면 null. */
+  ticker: string | null;
+  /** 보유 수량 (실시간 종목만). */
+  quantity: number | null;
+  /** 시세 통화 (실시간 종목만). */
+  currency: string | null;
+  /** 마지막 시세 갱신 시각(ISO). 실시간 배지·표시에 쓴다. */
+  pricedAt: string | null;
+  /** 1주(개)당 현재가(원). 평가액÷수량. 수동 자산은 null. */
+  unitPriceKrw: number | null;
+  /** 전일대비 등락률(%). 없으면 null. */
+  changePct: number | null;
+}
+
 export interface PortfolioView {
   total: number;
   slices: { assetClass: string; amount: number; percent: number }[];
-  holdings: { id: string; name: string; assetClass: string; amount: number }[];
+  holdings: PortfolioHoldingView[];
+  /** 실시간(티커 보유) 종목이 하나라도 있는가 — 새로고침 버튼 노출 판정. */
+  hasLive: boolean;
 }
 
 /** 포트폴리오 조회 — 보유자산 목록 + 자산군별 비중(core computePortfolio). */
@@ -360,35 +291,160 @@ export async function getPortfolio(): Promise<PortfolioView> {
   return {
     total,
     slices,
+    hasLive: rows.some((r) => r.ticker),
     holdings: rows.map((r) => ({
       id: r.id,
       name: r.name,
       assetClass: r.assetClass,
       amount: r.amount,
+      ticker: r.ticker,
+      quantity: r.quantity,
+      currency: r.currency,
+      pricedAt: r.pricedAt?.toISOString() ?? null,
+      unitPriceKrw:
+        r.ticker && r.quantity && r.quantity > 0
+          ? Math.round(r.amount / r.quantity)
+          : null,
+      changePct: r.changePct,
     })),
+  };
+}
+
+/** 시세 통화를 원화로 바꾸는 환율. KRW=1, USD=주입된 환율, 그 외·환율없음=null(환산불가). */
+function fxToKrw(currency: string, usdKrw: number | null): number | null {
+  if (currency === "KRW") return 1;
+  if (currency === "USD") return usdKrw;
+  return null;
+}
+
+/** 시세로 원화 평가액 + 전일대비 등락률 계산. 환산 불가면 null. */
+function valueFromQuote(
+  quantity: number,
+  quote: Quote,
+  usdKrw: number | null,
+): { amount: number; changePct: number | null } | null {
+  const fx = fxToKrw(quote.currency, usdKrw);
+  if (fx === null) return null;
+  return {
+    amount: marketValueKrw(quantity, quote.price, fx),
+    changePct: dailyChangePct(quote.price, quote.previousClose),
   };
 }
 
 export interface HoldingInput {
   name: string;
   assetClass: string;
+  /** 수동 입력 평가금액(원). 실시간 종목이면 무시하고 시세로 계산한다. */
   amount: number;
+  /** 실시간 종목이면 야후 심볼(예: 005930.KS, AAPL). */
+  ticker?: string;
+  /** 실시간 종목이면 보유 수량. */
+  quantity?: number;
 }
 
-/** 보유자산 추가. 포트폴리오·로드맵(현재자산) 갱신. */
+/**
+ * 보유자산 추가. 티커+수량이 있으면 즉시 시세를 조회해 평가액을 계산·캐시한다.
+ * 시세 조회에 실패해도 저장은 진행(수동 금액으로 폴백) — 다음 새로고침에서 갱신된다.
+ */
 export async function addHolding(input: HoldingInput): Promise<void> {
   const userId = await currentUserId();
-  const amount = Math.max(0, Math.round(input.amount));
+
+  const ticker = input.ticker?.trim()
+    ? normalizeTicker(input.ticker, input.assetClass)
+    : null;
+  const quantity =
+    ticker && Number.isFinite(input.quantity) && (input.quantity ?? 0) > 0
+      ? input.quantity!
+      : null;
+
+  let amount = Math.max(0, Math.round(input.amount));
+  let currency: string | null = null;
+  let pricedAt: Date | null = null;
+  let changePct: number | null = null;
+
+  if (ticker && quantity) {
+    const [quotes, usdKrw] = await Promise.all([
+      fetchQuotes([ticker]),
+      fetchUsdKrw(),
+    ]);
+    const quote = quotes.get(ticker);
+    if (quote) {
+      const valued = valueFromQuote(quantity, quote, usdKrw);
+      if (valued !== null) {
+        amount = valued.amount;
+        currency = quote.currency;
+        pricedAt = new Date();
+        changePct = valued.changePct;
+      }
+    }
+  }
+
   await prisma.holding.create({
     data: {
       userId,
       name: input.name.trim() || "자산",
       assetClass: input.assetClass,
       amount,
+      ticker,
+      quantity,
+      currency,
+      pricedAt,
+      changePct,
     },
   });
   revalidatePath("/portfolio");
   revalidatePath("/roadmap");
+}
+
+/**
+ * 실시간 종목 시세 새로고침. 티커가 있는 보유자산의 평가액을 다시 계산해 저장한다.
+ * 시세를 못 가져온 종목은 기존 값을 유지한다(앱은 계속 동작 — SPEC §원칙4 동일 정신).
+ */
+export async function refreshPrices(): Promise<{
+  updated: number;
+  at: string;
+}> {
+  const userId = await currentUserId();
+  const live = await prisma.holding.findMany({
+    where: { userId, ticker: { not: null } },
+    select: { id: true, ticker: true, quantity: true },
+  });
+  if (live.length === 0) return { updated: 0, at: new Date().toISOString() };
+
+  const tickers = live.map((h) => h.ticker!).filter(Boolean);
+  const needsFx = true; // USD 종목이 있을 수 있으니 항상 확보 시도(캐시되어 저렴).
+  const [quotes, usdKrw] = await Promise.all([
+    fetchQuotes(tickers),
+    needsFx ? fetchUsdKrw() : Promise.resolve(null),
+  ]);
+
+  const now = new Date();
+  let updated = 0;
+  const updates = [];
+  for (const h of live) {
+    if (!h.ticker || !h.quantity) continue;
+    const quote = quotes.get(h.ticker);
+    if (!quote) continue;
+    const valued = valueFromQuote(h.quantity, quote, usdKrw);
+    if (valued === null) continue;
+    updated++;
+    updates.push(
+      prisma.holding.update({
+        where: { id: h.id },
+        data: {
+          amount: valued.amount,
+          currency: quote.currency,
+          pricedAt: now,
+          changePct: valued.changePct,
+        },
+      }),
+    );
+  }
+  if (updates.length > 0) await prisma.$transaction(updates);
+
+  revalidatePath("/portfolio");
+  revalidatePath("/roadmap");
+  return { updated, at: now.toISOString() };
 }
 
 /** 보유자산 삭제. */
@@ -397,6 +453,82 @@ export async function deleteHolding(id: string): Promise<void> {
   await prisma.holding.deleteMany({ where: { id, userId } });
   revalidatePath("/portfolio");
   revalidatePath("/roadmap");
+}
+
+/** 사진에서 보유자산 후보 추출 (저장 안 함 — 미리보기용). */
+export async function extractHoldingsFromImage(
+  dataUrl: string,
+): Promise<VisionResult> {
+  return runVision(dataUrl);
+}
+
+/**
+ * 보유자산 여러 건 일괄 저장 (사진 미리보기 확인 후). 티커+수량이 있는 행은
+ * 시세를 한 번에 조회해 실시간 평가액으로 저장한다. 한 번만 revalidate.
+ */
+export async function addHoldingsBatch(rows: HoldingInput[]): Promise<number> {
+  const userId = await currentUserId();
+  if (rows.length === 0) return 0;
+
+  // 실시간 대상(티커+수량) 행을 추려 시세·환율을 한 번에 확보.
+  const prepared = rows.map((r) => {
+    const ticker = r.ticker?.trim()
+      ? normalizeTicker(r.ticker, r.assetClass)
+      : null;
+    const quantity =
+      ticker && Number.isFinite(r.quantity) && (r.quantity ?? 0) > 0
+        ? r.quantity!
+        : null;
+    return { r, ticker, quantity };
+  });
+  const liveTickers = prepared
+    .filter((p) => p.ticker && p.quantity)
+    .map((p) => p.ticker!);
+
+  let quotes = new Map<string, Quote>();
+  let usdKrw: number | null = null;
+  if (liveTickers.length > 0) {
+    [quotes, usdKrw] = await Promise.all([
+      fetchQuotes(liveTickers),
+      fetchUsdKrw(),
+    ]);
+  }
+
+  const now = new Date();
+  const data = prepared.map(({ r, ticker, quantity }) => {
+    let amount = Math.max(0, Math.round(r.amount));
+    let currency: string | null = null;
+    let pricedAt: Date | null = null;
+    let changePct: number | null = null;
+    if (ticker && quantity) {
+      const quote = quotes.get(ticker);
+      if (quote) {
+        const valued = valueFromQuote(quantity, quote, usdKrw);
+        if (valued !== null) {
+          amount = valued.amount;
+          currency = quote.currency;
+          pricedAt = now;
+          changePct = valued.changePct;
+        }
+      }
+    }
+    return {
+      userId,
+      name: r.name.trim() || "자산",
+      assetClass: r.assetClass,
+      amount,
+      ticker,
+      quantity,
+      currency,
+      pricedAt,
+      changePct,
+    };
+  });
+
+  await prisma.holding.createMany({ data });
+  revalidatePath("/portfolio");
+  revalidatePath("/roadmap");
+  return data.length;
 }
 
 // ── 월별 로드맵 (Monthly Overview) ─────────────────────────────────────────

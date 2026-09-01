@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Flag, CalendarDays, PieChart, Bot, Upload } from "lucide-react";
+import { Flag, CalendarDays, PieChart, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -11,7 +11,6 @@ const LINKS = [
   { href: "/monthly", label: "월별", icon: CalendarDays },
   { href: "/portfolio", label: "자산", icon: PieChart },
   { href: "/assistant", label: "AI", icon: Bot },
-  { href: "/transactions/import", label: "가져오기", icon: Upload },
 ];
 
 export function AppNav() {

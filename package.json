@@ -12,8 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx prisma/seed.ts",
-    "verify": "tsx scripts/verify-engines.ts",
-    "import:kakao": "tsx scripts/import-kakaobank.ts"
+    "verify": "tsx scripts/verify-engines.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

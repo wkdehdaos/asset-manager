@@ -49,8 +49,18 @@ model Holding {
   name       String
   /// stock | fund | savings | bond | crypto | cash | other
   assetClass String
-  /// 평가금액(원)
+  /// 평가금액(원). 티커가 있으면 새로고침 때 수량×실시간가×환율로 재계산해 캐시한다.
   amount     Int
+  /// 야후 파이낸스 심볼 (예: 005930.KS, AAPL, BTC-USD). 있으면 실시간 평가 대상.
+  ticker     String?
+  /// 보유 수량(주·개). 소수 허용(암호화폐 등). 티커와 함께 있을 때만 의미.
+  quantity   Float?
+  /// 시세 통화 (KRW·USD 등). USD면 환율로 원화 환산. 마지막 조회 시점 값.
+  currency   String?
+  /// 마지막 시세 조회 시각. 실시간 배지·표시에 쓴다.
+  pricedAt   DateTime?
+  /// 마지막 조회 시점의 전일대비 등락률(%). 없으면 null(장 시간 밖·전일종가 없음).
+  changePct  Float?
   order      Int      @default(0)
   createdAt  DateTime @default(now())
 

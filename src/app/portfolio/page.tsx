@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getPortfolio } from "@/app/actions";
 import { buttonVariants } from "@/components/ui/button";
 import { PortfolioClient } from "./portfolio-client";
+import { PhotoAddButton } from "./photo-add-button";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +17,15 @@ export default async function PortfolioPage() {
             보유 자산을 넣으면 자산군별 비중으로 보여줘요.
           </p>
         </div>
-        <Link
-          href="/roadmap"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          로드맵
-        </Link>
+        <div className="flex items-center gap-2">
+          <PhotoAddButton />
+          <Link
+            href="/roadmap"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            로드맵
+          </Link>
+        </div>
       </header>
 
       <PortfolioClient view={view} />
