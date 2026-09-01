@@ -30,8 +30,8 @@ export default async function LoginPage({
         <Input
           type="password"
           name="password"
-          inputMode="numeric"
           autoFocus
+          autoComplete="current-password"
           placeholder="비밀번호"
           className="h-12 text-center text-lg"
         />
